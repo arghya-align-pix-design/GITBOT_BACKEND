@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  githubId     String       @unique
+  githubLogin  String
+  accessToken  String
+  createdAt    DateTime     @default(now())
+  repositories Repository[]
+}
+
+model Repository {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  repoName     String
+  repoFullName String   // e.g. "cosmic/my-repo"
+  webhookId    String?  // GitHub webhook ID after registration
+  createdAt    DateTime @default(now())
+
+  webhookEvents WebhookEvent[]
+  botActions    BotAction[]
+}
+
+model WebhookEvent {
+  id           String      @id @default(cuid())
+  deliveryId   String      @unique // X-GitHub-Delivery header — idempotency key
+  repositoryId String
+  repository   Repository  @relation(fields: [repositoryId], references: [id])
+  eventType    String      // "issues", "pull_request", "push"
+  action       String?     // "opened", "closed", etc.
+  payload      Json
+  receivedAt   DateTime    @default(now())
+  processed    Boolean     @default(false)
+
+  botActions   BotAction[]
+}
+
+model BotAction {
+  id             String       @id @default(cuid())
+  webhookEventId String
+  webhookEvent   WebhookEvent @relation(fields: [webhookEventId], references: [id])
+  repositoryId   String
+  repository     Repository   @relation(fields: [repositoryId], references: [id])
+  actionType     String       // "add_label", "post_comment", "slack_notify"
+  status         String       // "success", "failed", "retrying"
+  detail         String?
+  createdAt      DateTime     @default(now())
+}
+
+model Rule {
+  id           String   @id @default(cuid())
+  repositoryId String
+  eventType    String
+  matchField   String   // "title", "body", "author"
+  matchValue   String
+  labelToAdd   String?
+  slackNotify  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
